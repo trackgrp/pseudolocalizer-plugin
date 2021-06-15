@@ -1,6 +1,6 @@
 import * as _ from 'lodash'
 import * as pseudoloc from 'pseudoloc'
-import { Compiler } from 'webpack'
+import { Compiler, WebpackError, sources, Compilation } from 'webpack'
 
 /*
  * Generates pseudolocalization localizations for localization testing
@@ -12,23 +12,35 @@ export class PseudolocalizerPlugin {
   }
 
   public apply(compiler: Compiler): void {
-    compiler.hooks.emit.tap('pseudolocalizer', (compilation) => {
-      pseudoloc.option.startDelimiter = '{{'
-      pseudoloc.option.endDelimiter = '}}'
+    const { RawSource } = sources;
 
-      if (!(this.baseLocalizationsPath in compilation.assets)) {
-        compilation.errors.push(`Failed to find ${this.baseLocalizationsPath} in ${_.join(_.keys(compilation.assets), ',')}. Unable to pseudolocalize file`)
-        return
+    compiler.hooks.thisCompilation.tap(
+      'pseudolocalizer',
+      compilation => {
+        compilation.hooks.processAssets.tap(
+          { name: 'pseudolocalizer', stage: Compilation.PROCESS_ASSETS_STAGE_SUMMARIZE },
+          assets => {
+            pseudoloc.option.startDelimiter = '{{'
+            pseudoloc.option.endDelimiter = '}}'
+
+            if (!(this.baseLocalizationsPath in assets)) {
+              compilation.errors.push(
+                new WebpackError(`Failed to find ${this.baseLocalizationsPath} in ${_.join(_.keys(compilation.assets), ',')}.Unable to pseudolocalize file`)
+              )
+              return
+            }
+
+            const translations = JSON.parse(compilation.assets[this.baseLocalizationsPath].source().toString())
+            const pseudolocalizedTranslations = this.pseudolocalizeTranslations(translations)
+
+            compilation.emitAsset(
+              this.pseudoLocalizationsPath,
+              new RawSource(pseudolocalizedTranslations)
+            )
+          }
+        )
       }
-
-      const translations = JSON.parse(compilation.assets[this.baseLocalizationsPath].source())
-      const pseudolocalizedTranslations = this.pseudolocalizeTranslations(translations)
-
-      compilation.assets[this.pseudoLocalizationsPath] = {
-        source: () => pseudolocalizedTranslations,
-        size: () => pseudolocalizedTranslations.length,
-      }
-    })
+    )
   }
 
   private pseudolocalizeTranslations(translations): string {
