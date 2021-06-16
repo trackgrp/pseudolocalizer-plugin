@@ -1,3 +1,4 @@
+import * as fs from 'fs'
 import * as _ from 'lodash'
 import * as pseudoloc from 'pseudoloc'
 import { Compiler } from 'webpack'
@@ -12,16 +13,13 @@ export class PseudolocalizerPlugin {
   }
 
   public apply(compiler: Compiler): void {
-    compiler.hooks.emit.tap('pseudolocalizer', (compilation) => {
+    compiler.hooks.emit.tap('pseudolocalizer', compilation => {
       pseudoloc.option.startDelimiter = '{{'
       pseudoloc.option.endDelimiter = '}}'
 
-      if (!(this.baseLocalizationsPath in compilation.assets)) {
-        compilation.errors.push(`Failed to find ${this.baseLocalizationsPath} in ${_.join(_.keys(compilation.assets), ',')}. Unable to pseudolocalize file`)
-        return
-      }
-
-      const translations = JSON.parse(compilation.assets[this.baseLocalizationsPath].source())
+      const translations = JSON.parse(
+        fs.readFileSync('src/shared/' + this.baseLocalizationsPath).toString()
+      );
       const pseudolocalizedTranslations = this.pseudolocalizeTranslations(translations)
 
       compilation.assets[this.pseudoLocalizationsPath] = {
